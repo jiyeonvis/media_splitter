@@ -1,7 +1,7 @@
 name: Build PDF Splitter
 
 on:
-  workflow_dispatch:  # 수동으로 실행
+  workflow_dispatch:
 
 jobs:
   build:
@@ -29,16 +29,25 @@ jobs:
       - name: 의존성 설치
         run: pip install pymupdf pyinstaller
 
-      - name: UPX 설치 (Windows)
-        if: matrix.os == 'windows-latest'
-        run: choco install upx -y
-
-      - name: UPX 설치 (macOS)
+      - name: ffmpeg 설치 (macOS)
         if: matrix.os == 'macos-latest'
-        run: brew install upx
+        run: |
+          brew install ffmpeg
+          cp $(which ffmpeg) ./ffmpeg
+
+      - name: ffmpeg 설치 (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install ffmpeg -y
+          copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg.exe
 
       - name: 빌드
-        run: pyinstaller ${{ matrix.pyinstaller_args }} -y --upx-dir . pdf_splitter.py
+        run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg:." pdf_splitter.py
+        if: matrix.os == 'macos-latest'
+
+      - name: 빌드 (Windows)
+        run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg.exe;." pdf_splitter.py
+        if: matrix.os == 'windows-latest'
 
       - name: 결과물 업로드
         uses: actions/upload-artifact@v4
