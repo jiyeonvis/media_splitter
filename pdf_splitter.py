@@ -4,7 +4,7 @@ PDF & 오디오 도구 (PyQt6)
 의존성: pip install pymupdf pyqt6
 """
 
-VERSION = "v1.0.0"
+VERSION = "v1.0.1"
 GITHUB_REPO = "jiyeonvis/pdf_splitter"
 
 import os
@@ -593,19 +593,25 @@ class AudioConvertTab(BaseTab):
                 out_path = out_dir / (Path(src).stem + ".m4a")
                 signals.log.emit(f"\n[{i+1}/{len(self.selected_paths)}] {Path(src).name}", "")
                 try:
-                    result = subprocess.run(
-                        [ffmpeg, "-y", "-i", src, "-c:a", "aac", "-b:a", bitrate, str(out_path)],
-                        capture_output=True, text=True
-                    )
-                    if result.returncode == 0:
-                        signals.log.emit(f"    → {out_path.name}  ({get_mb(out_path):.1f} MB)", "")
-                        done += 1
-                        if self.chk_delete.isChecked():
-                            Path(src).unlink()
-                            signals.log.emit("    원본 삭제됨", "warn")
-                    else:
-                        signals.log.emit(f"    ❌ 오류: {result.stderr[-200:]}", "err")
-                        failed += 1
+                    # Windows에서 한글/공백 경로 문제 방지: 임시 ASCII 경로로 복사 후 처리
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        tmp_in  = Path(tmp_dir) / f"input{Path(src).suffix}"
+                        tmp_out = Path(tmp_dir) / "output.m4a"
+                        shutil.copy2(src, tmp_in)
+                        result = subprocess.run(
+                            [ffmpeg, "-y", "-i", str(tmp_in), "-c:a", "aac", "-b:a", bitrate, str(tmp_out)],
+                            capture_output=True, text=True
+                        )
+                        if result.returncode == 0:
+                            shutil.move(str(tmp_out), str(out_path))
+                            signals.log.emit(f"    → {out_path.name}  ({get_mb(out_path):.1f} MB)", "")
+                            done += 1
+                            if self.chk_delete.isChecked():
+                                Path(src).unlink()
+                                signals.log.emit("    원본 삭제됨", "warn")
+                        else:
+                            signals.log.emit(f"    ❌ 오류: {result.stderr[-200:]}", "err")
+                            failed += 1
                 except FileNotFoundError:
                     signals.log.emit("    ❌ ffmpeg을 찾을 수 없습니다.", "err")
                     failed += 1
@@ -675,8 +681,8 @@ class AudioSplitTab(BaseTab):
         self.progress.setMaximum(len(targets))
         self.log.clear()
 
-        def get_duration(src):
-            result = subprocess.run([ffmpeg, "-i", src], capture_output=True, text=True)
+        def get_duration(tmp_src):
+            result = subprocess.run([ffmpeg, "-i", str(tmp_src)], capture_output=True, text=True)
             for line in result.stderr.split("\n"):
                 if "Duration" in line:
                     t = line.split("Duration:")[1].split(",")[0].strip()
@@ -691,24 +697,30 @@ class AudioSplitTab(BaseTab):
                 out_dir.mkdir(parents=True, exist_ok=True)
                 signals.log.emit(f"\n[{i+1}/{len(targets)}] {Path(src).name}  ({get_mb(src):.1f} MB)", "")
                 try:
-                    duration = get_duration(src)
-                    if not duration:
-                        raise ValueError("재생 시간을 읽을 수 없습니다.")
-                    secs = int(duration * (max_mb / get_mb(src)) * 0.9)
                     ext = Path(src).suffix.lower()
-                    part_num, start = 1, 0
-                    while start < duration:
-                        end = min(start + secs, duration)
-                        out_name = f"{Path(src).stem}_part{part_num}{ext}"
-                        out_path = str(out_dir / out_name)
-                        subprocess.run(
-                            [ffmpeg, "-y", "-i", src, "-ss", str(start),
-                             "-to", str(end), "-c", "copy", out_path],
-                            capture_output=True
-                        )
-                        signals.log.emit(f"    → {out_name}  ({get_mb(out_path):.1f} MB)", "")
-                        start = end
-                        part_num += 1
+                    # Windows에서 한글/공백 경로 문제 방지: 임시 ASCII 경로로 복사 후 처리
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        tmp_in = Path(tmp_dir) / f"input{ext}"
+                        shutil.copy2(src, tmp_in)
+                        duration = get_duration(tmp_in)
+                        if not duration:
+                            raise ValueError("재생 시간을 읽을 수 없습니다.")
+                        secs = int(duration * (max_mb / get_mb(src)) * 0.9)
+                        part_num, start = 1, 0
+                        while start < duration:
+                            end = min(start + secs, duration)
+                            tmp_out = Path(tmp_dir) / f"part{part_num}{ext}"
+                            subprocess.run(
+                                [ffmpeg, "-y", "-i", str(tmp_in), "-ss", str(start),
+                                 "-to", str(end), "-c", "copy", str(tmp_out)],
+                                capture_output=True
+                            )
+                            out_name = f"{Path(src).stem}_part{part_num}{ext}"
+                            out_path = out_dir / out_name
+                            shutil.move(str(tmp_out), str(out_path))
+                            signals.log.emit(f"    → {out_name}  ({get_mb(out_path):.1f} MB)", "")
+                            start = end
+                            part_num += 1
                     done += 1
                     if self.chk_delete.isChecked():
                         Path(src).unlink()
@@ -744,6 +756,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(AudioConvertTab(),"  오디오 → m4a  ")
         tabs.addTab(AudioSplitTab(),  "  오디오 용량 분할  ")
         tabs.setContentsMargins(8, 8, 8, 8)
+
+
 
         self.setCentralWidget(tabs)
 

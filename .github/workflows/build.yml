@@ -1,87 +1,87 @@
 name: Build PDF Splitter
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "릴리스 버전 (예: v1.0.1)"
-        required: true
-        default: "v1.0.0"
+    workflow_dispatch:
+        inputs:
+            version:
+                description: '릴리스 버전 (예: v1.0.1)'
+                required: true
+                default: 'v1.0.1'
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            artifact_name: pdf_splitter_windows
-            pyinstaller_args: --onefile --windowed --icon=icon.ico
-          - os: macos-latest
-            artifact_name: pdf_splitter_mac
-            pyinstaller_args: --onedir --windowed --icon=icon.icns
+    build:
+        strategy:
+            matrix:
+                include:
+                    - os: windows-latest
+                      artifact_name: pdf_splitter_windows
+                      pyinstaller_args: --onefile --windowed --icon=icon.ico
+                    - os: macos-latest
+                      artifact_name: pdf_splitter_mac
+                      pyinstaller_args: --onedir --windowed --icon=icon.icns
 
-    runs-on: ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
 
-    steps:
-      - name: 코드 체크아웃
-        uses: actions/checkout@v4
+        steps:
+            - name: 코드 체크아웃
+              uses: actions/checkout@v4
 
-      - name: Python 설치
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+            - name: Python 설치
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
 
-      - name: 의존성 설치
-        run: pip install pymupdf pyqt6 pyinstaller
+            - name: 의존성 설치
+              run: pip install pymupdf pyqt6 pyinstaller
 
-      - name: ffmpeg 설치 (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install ffmpeg
-          cp $(which ffmpeg) ./ffmpeg
+            - name: ffmpeg 설치 (macOS)
+              if: matrix.os == 'macos-latest'
+              run: |
+                  brew install ffmpeg
+                  cp $(which ffmpeg) ./ffmpeg
 
-      - name: ffmpeg 설치 (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install ffmpeg -y
-          copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg.exe
+            - name: ffmpeg 설치 (Windows)
+              if: matrix.os == 'windows-latest'
+              run: |
+                  choco install ffmpeg -y
+                  copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg.exe
 
-      - name: 빌드 (macOS)
-        if: matrix.os == 'macos-latest'
-        run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg:." pdf_splitter.py
+            - name: 빌드 (macOS)
+              if: matrix.os == 'macos-latest'
+              run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg:." pdf_splitter.py
 
-      - name: 빌드 (Windows)
-        if: matrix.os == 'windows-latest'
-        run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg.exe;." pdf_splitter.py
+            - name: 빌드 (Windows)
+              if: matrix.os == 'windows-latest'
+              run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg.exe;." pdf_splitter.py
 
-      - name: 압축 (macOS)
-        if: matrix.os == 'macos-latest'
-        run: cd dist && zip -r pdf_splitter_mac.zip pdf_splitter/
+            - name: 압축 (macOS)
+              if: matrix.os == 'macos-latest'
+              run: cd dist && zip -r pdf_splitter_mac.zip pdf_splitter/
 
-      - name: 압축 (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cd dist && Compress-Archive -Path pdf_splitter.exe -DestinationPath pdf_splitter_windows.zip
-        shell: pwsh
+            - name: 압축 (Windows)
+              if: matrix.os == 'windows-latest'
+              run: cd dist && Compress-Archive -Path pdf_splitter.exe -DestinationPath pdf_splitter_windows.zip
+              shell: pwsh
 
-      - name: 결과물 업로드
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/*.zip
+            - name: 결과물 업로드
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.artifact_name }}
+                  path: dist/*.zip
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
+    release:
+        needs: build
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: 아티팩트 다운로드
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
+        steps:
+            - name: 아티팩트 다운로드
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts/
 
-      - name: GitHub Release 생성 및 파일 업로드
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: ${{ github.event.inputs.version }}
-          files: artifacts/**/*.zip
+            - name: GitHub Release 생성 및 파일 업로드
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.event.inputs.version }}
+                  name: ${{ github.event.inputs.version }}
+                  files: artifacts/**/*.zip
