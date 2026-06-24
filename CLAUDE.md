@@ -61,15 +61,15 @@ MainWindow(QMainWindow) ← QTabWidget으로 4탭 구성
 | 메서드 | 역할 |
 |---|---|
 | `_input_group(ext_filter)` | 폴더/파일 선택 UI + 파일 목록 위젯 |
-| `_output_group()` | 출력 폴더 + 옵션 체크박스 |
 | `_log_widget()` | 로그 출력 QTextEdit |
-| `_progress_widget()` | 진행률 QProgressBar |
+| `_stop_btn()` | ⏹ 강제중단 버튼 생성 (평소 비활성, 처리 중만 활성) |
+| `_confirm_stop()` | "정말로 중단하시겠습니까?" 팝업 → Yes면 `_stop_event.set()` |
 | `_pick_folder(ext)` | 폴더 선택 → 파일 목록 갱신, 경로 표시 |
 | `_pick_files(ext)` | 파일 직접 선택 |
 | `_rescan_folder()` | 체크박스 변경 시 백그라운드 재스캔 |
 | `_resolve_out(src)` | 출력 경로 결정 (하위 폴더 구조 유지 포함) |
 | `_append_log(widget, msg, tag)` | 색상 태그로 로그 추가 |
-| `_launch(signals, fn, *btns)` | 백그라운드 스레드 실행 + 버튼 비활성화 |
+| `_launch(signals, fn, stop_btn, *btns)` | `threading.Event` 생성, 백그라운드 스레드 실행, 버튼 상태 관리 |
 
 ### 스레드 안전성
 
@@ -78,8 +78,27 @@ Qt UI는 메인 스레드에서만 업데이트해야 한다. `WorkerSignals(QOb
 ```python
 class WorkerSignals(QObject):
     log      = pyqtSignal(str, str)   # (메시지, 색상태그)
-    progress = pyqtSignal(int)
     finished = pyqtSignal()
+```
+
+### 강제중단 메커니즘
+
+`_launch()` 호출 시 `self._stop_event = threading.Event()`를 생성하고 강제중단 버튼을 활성화한다. 워커 스레드는 루프 상단에서 `stop_event.is_set()`을 확인하고 True면 즉시 중단한다. ffmpeg Popen을 사용하는 탭(3, 4)은 `proc.terminate()` + `proc.wait()`로 프로세스를 종료한다.
+
+```python
+# 워커 루프 패턴
+for src in targets:
+    if stop_event.is_set():
+        signals.log.emit("\n⏹ 중단됨", "warn")
+        break
+    ...  # 작업
+
+# ffmpeg Popen 패턴 (탭 3)
+for line in proc.stderr:
+    if stop_event.is_set():
+        proc.terminate()
+        proc.wait()
+        break
 ```
 
 ### ffmpeg 번들 경로
