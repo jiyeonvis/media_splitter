@@ -53,6 +53,13 @@ jobs:
               if: matrix.os == 'macos-latest'
               run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg:." pdf_splitter.py
 
+            - name: 코드 서명 (macOS, ad-hoc)
+              if: matrix.os == 'macos-latest'
+              run: |
+                  find dist/pdf_splitter -type f \( -name "*.so" -o -name "*.dylib" \) \
+                    -exec codesign --force --sign - {} \;
+                  codesign --force --sign - dist/pdf_splitter/pdf_splitter
+
             - name: 빌드 (Windows)
               if: matrix.os == 'windows-latest'
               run: pyinstaller ${{ matrix.pyinstaller_args }} -y --add-binary "ffmpeg.exe;." pdf_splitter.py
