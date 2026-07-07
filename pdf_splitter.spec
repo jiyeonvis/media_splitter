@@ -4,7 +4,7 @@
 a = Analysis(
     ['pdf_splitter.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('ffmpeg', '.')],
     datas=[],
     hiddenimports=[],
     hookspath=[],
