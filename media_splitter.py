@@ -4,7 +4,7 @@ PDF & 오디오 도구 (PyQt6)
 의존성: pip install pymupdf pyqt6
 """
 
-VERSION = "v1.0.2"
+VERSION = "v1.0.3"
 GITHUB_REPO = "jiyeonvis/pdf_splitter"
 
 import os
