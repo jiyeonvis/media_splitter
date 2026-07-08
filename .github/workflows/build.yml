@@ -56,11 +56,28 @@ jobs:
             - name: 코드 서명 (macOS, ad-hoc)
               if: matrix.os == 'macos-latest'
               run: |
-                  find dist/media_splitter -type f | while IFS= read -r f; do
-                    if file "$f" | grep -q "Mach-O"; then
-                      codesign --force --sign - "$f" 2>/dev/null || true
-                    fi
-                  done
+                  # 라이브러리 검증 비활성화 엔타이틀먼트
+                  cat > /tmp/entitlements.plist << 'PLIST'
+                  <?xml version="1.0" encoding="UTF-8"?>
+                  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                  <plist version="1.0">
+                  <dict>
+                      <key>com.apple.security.cs.disable-library-validation</key>
+                      <true/>
+                      <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+                      <true/>
+                  </dict>
+                  </plist>
+                  PLIST
+
+                  # .dylib, .so 서명
+                  find dist/media_splitter -type f \( -name "*.dylib" -o -name "*.so" \) \
+                    -exec codesign --force --sign - {} \;
+
+                  # 메인 실행 파일: 엔타이틀먼트 포함 서명 (라이브러리 검증 비활성화)
+                  codesign --force --sign - \
+                    --entitlements /tmp/entitlements.plist \
+                    dist/media_splitter/media_splitter
 
             - name: 빌드 (Windows)
               if: matrix.os == 'windows-latest'
